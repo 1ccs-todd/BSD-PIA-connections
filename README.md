@@ -1,4 +1,4 @@
-# Manual PIA VPN Connections
+# Configure PIA VPN Connections
 
 ### This is a FreeBSD/TrueNAS CORE Wireguard and OpenVPN fork of https://github.com/glorious1/manual-connections/.
 ### Which is a FreeBSD OpenVPN fork of the original Linux scripts at https://github.com/pia-foss/manual-connections.  
