@@ -19,8 +19,8 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-# This script has not been completely edited to make it 
-# BSD-compatible because I don't use wireguard.  
+# Build pia.conf and start wg
+# Run port_forwarding if PF enabled
 
 # This function allows you to check if the required tools have been installed.
 function check_tool() {
@@ -29,12 +29,13 @@ function check_tool() {
   if ! command -v $cmd &>/dev/null
   then
     echo "$cmd could not be found"
-    echo "Please install $package"
-    exit 1
+    echo "Installing $package"
+    pkg install -y $package
   fi
 }
 # Now we call the function to make sure we can use wg-quick, curl and jq.
-check_tool wg-quick wireguard-tools
+check_tool wg-quick wireguard
+check_tool wireguard-go wireguard-go
 check_tool curl curl
 check_tool jq jq
 
@@ -104,7 +105,7 @@ fi
 # these scripts. Feel free to fork the project and test it out.
 echo
 echo Trying to disable a PIA WG connection in case it exists...
-wg-quick down pia && echo Disconnected!
+/usr/local/bin/wg-quick down pia && echo Disconnected!
 echo
 
 # Create the WireGuard config based on the JSON received from the API
@@ -124,7 +125,7 @@ if [ "$PIA_DNS" == true ]; then
 fi
 echo "
 [Interface]
-Address = $(echo "$wireguard_json" | jq -r '.peer_ip')
+Address = $(echo "$wireguard_json" | jq -r '.peer_ip')/8
 PrivateKey = $privKey
 $dnsSettingForVPN
 [Peer]
@@ -141,7 +142,7 @@ echo OK!
 # just hardcode /etc/resolv.conf to "nameserver 10.0.0.242".
 echo
 echo Trying to create the wireguard interface...
-wg-quick up pia || exit 1
+/usr/local/bin/wg-quick up pia || exit 1
 echo "The WireGuard interface got created.
 At this point, internet should work via VPN.
 

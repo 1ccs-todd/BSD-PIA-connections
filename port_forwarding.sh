@@ -19,6 +19,9 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
+# Get random port from API
+# Run refresh_pia_port.sh to bind to random port
+
 echo "
 #######################################
     port_forwarding.sh
@@ -32,8 +35,8 @@ function check_tool() {
   if ! command -v $cmd &>/dev/null
   then
     echo "$cmd could not be found"
-    echo "Please run 'pkg install $package'"
-    exit 1
+    echo "Installing $package"
+    pkg install -y $package
   fi
 }
 # Now we call the function to make sure we can use base64.
@@ -119,8 +122,7 @@ echo "The signature is OK.
 "
 
 # Save variables to files so refresh script can get them
-pf_filepath=/pia-info/pf
-mkdir $pf_filepath
+pf_filepath=/config/pia/pia-info
 echo "$PF_HOSTNAME" > $pf_filepath/PF_HOSTNAME
 echo "$PF_GATEWAY" > $pf_filepath/PF_GATEWAY
 echo "$payload" > $pf_filepath/payload

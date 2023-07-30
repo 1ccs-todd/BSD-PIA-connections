@@ -20,49 +20,160 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-# Only allow script to run as root
-
-now="$(date)"
+# Collect all necessary variables for remaining scripts.
+# run get_region_and_token.sh
 
 echo "
 ################################
     run_setup.sh
 ################################
-
-Starting script at $now
 "
 
+# Only allow script to run as
 if [ "$(whoami)" != "root" ]; then
   echo "This script needs to be run as root. Try again with 'sudo $0'"
   exit 1
 fi
 
-# Hardcoding all the settings to make testing (and using!) easier
+echo
+echo -n "PIA username (pNNNNNNN): "
+read PIA_USER
 
-# Fetching credentials from local pass.txt file
-# just so they don't show on github
-# Username on first line, password on second
-declare -a creds # an array
-readarray -t creds < /pia-info/pia_creds.txt
-PIA_USER="${creds[0]}"
-PIA_PASS="${creds[1]}"
-echo "Retrieved credentials"
+if [ -z "$PIA_USER" ]; then
+  echo Username is required, aborting.
+  exit 1
+fi
+echo
 export PIA_USER
+
+echo -n "PIA password: "
+read -s PIA_PASS
+echo
+
+if [ -z "$PIA_PASS" ]; then
+  echo Password is required, aborting.
+  exit 1
+fi
+echo
 export PIA_PASS
 
-protocol="udp"
-encryption="strong"
+# This section asks for user connection preferences
+echo -n "Connection method ([W]ireguard/[o]penvpn): "
+read connection_method
+echo
 
-# To use openvn remove # from start of that line and add it to start of "PIA_AUTOCONNECT=wireguard"
-#PIA_AUTOCONNECT="openvpn_${protocol}_${encryption}"
-PIA_AUTOCONNECT=wireguard
+PIA_AUTOCONNECT="wireguard"
+if echo ${connection_method:0:1} | grep -iq o; then
+  echo -n "Connection method ([U]dp/[t]cp): "
+  read protocolInput
+  echo
+
+  protocol="udp"
+  if echo ${protocolInput:0:1} | grep -iq t; then
+    protocol="tcp"
+  fi
+
+  echo "Higher levels of encryption trade performance for security. "
+  echo -n "Do you want to use strong encryption ([N]o/[y]es): "
+  read strongEncryption
+  echo
+
+  encryption="standard"
+  if echo ${strongEncryption:0:1} | grep -iq y; then
+    encryption="strong"
+  fi
+
+  PIA_AUTOCONNECT="openvpn_${protocol}_${encryption}"
+fi
 export PIA_AUTOCONNECT
+echo PIA_AUTOCONNECT=$PIA_AUTOCONNECT"
+"
 
-PIA_DNS="false"
+# Check for the required presence of resolvconf for setting DNS on wireguard connections.
+setDNS="yes"
+if ! command -v resolvconf &>/dev/null && [ "$PIA_AUTOCONNECT" == wireguard ]; then
+  echo The resolvconf package could not be found.
+  echo This script can not set DNS for you and you will
+  echo need to invoke DNS protection some other way.
+  echo
+  setDNS="no"
+fi
+
+if [ "$setDNS" != no ]; then
+  echo Using third party DNS could allow DNS monitoring.
+  echo -n "Do you want to force PIA DNS ([Y]es/[n]o): "
+  read setDNS
+  echo
+fi
+
+PIA_DNS="true"
+if echo ${setDNS:0:1} | grep -iq n; then
+  PIA_DNS="false"
+fi
 export PIA_DNS
-PIA_PF="true"
+echo PIA_DNS=$PIA_DNS"
+"
+
+# Prepare to save variables
+pf_filepath=/config/pia/pia-info
+mkdir -p $pf_filepath
+
+echo -n "Do you want a forwarding port assigned ([N]o/[y]es): "
+read portForwarding
+echo
+
+PIA_PF="false"
+if echo ${portForwarding:0:1} | grep -iq y; then
+  PIA_PF="true"
+  echo "Username and password for torrent client: "
+  echo -n "Enter username: "
+  read torrentUser
+  echo -n "Enter password: "
+  read -s torrentPass
+  echo
+  # Save variables to files so refresh script can get them
+  echo "$torrentUser" > $pf_filepath/torrent_creds.txt
+  echo "$torrentPass" >> $pf_filepath/torrent_creds.txt
+fi
 export PIA_PF
-MAX_LATENCY=0.1
+echo PIA_PF=$PIA_PF
+
+# Set this to the maximum allowed latency in seconds.
+# All servers that respond slower than this will be ignored.
+echo -n "
+With no input, the maximum allowed latency will be set to 0.05s (50ms).
+If your connection has high latency, you may need to increase this value.
+For example, you can try 0.2 for 200ms allowed latency.
+Custom latency (no input required for 50ms): "
+read customLatency
+echo
+
+MAX_LATENCY=0.05
+if [[ $customLatency != "" ]]; then
+  MAX_LATENCY=$customLatency
+fi
 export MAX_LATENCY
+echo "MAX_LATENCY=\"$MAX_LATENCY\"
+"
+# Save variables for run_setup_again.sh script.
+echo "$PIA_PF" > $pf_filepath/PIA_PF
+echo "$PIA_DNS" > $pf_filepath/PIA_DNS
+echo "$PIA_AUTOCONNECT" > $pf_filepath/PIA_AUTOCONNECT
+echo "$MAX_LATENCY" > $pf_filepath/MAX_LATENCY
+
+echo "Having active IPv6 connections might compromise security by allowing"
+echo "split tunnel connections that run outside the VPN tunnel."
+echo -n "Do you want to disable IPv6? (Y/n): "
+read disable_IPv6
+echo
+
+if echo ${disable_IPv6:0:1} | grep -iq n; then
+  echo "IPv6 settings have not been altered."
+else
+  sysrc ipv6_network_interfaces="none"
+  echo
+  echo "IPv6 has been disabled, you can enable it again with: "
+  echo "sysrc ipv6_network_interfaces=auto"  
+fi
 
 ./get_region_and_token.sh

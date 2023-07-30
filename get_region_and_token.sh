@@ -19,6 +19,9 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
+# Find fastest server, filter for PF if enabled.
+# run connect_to_xxx_with_token.sh
+
 echo "
 ################################
     get_region_and_token.sh
@@ -32,13 +35,18 @@ function check_tool() {
   if ! command -v $cmd &>/dev/null
   then
     echo "$cmd could not be found"
-    echo "Please install $package"
-    exit 1
+    echo "Installing $package"
+    pkg install -y $package
   fi
 }
 # Now we call the function to make sure we can use curl and jq.
 check_tool curl curl
 check_tool jq jq
+
+# This function creates a timestamp, to use for setting $TOKEN_EXPIRATION
+timeout_timestamp() {
+  date -v+1d # Timestamp 24 hours
+}
 
 # This allows you to set the maximum allowed latency in seconds.
 # All servers that respond slower than this will be ignored.
@@ -47,7 +55,7 @@ check_tool jq jq
 MAX_LATENCY=${MAX_LATENCY:-0.05}
 export MAX_LATENCY
 
-serverlist_url='https://serverlist.piaservers.net/vpninfo/servers/v4'
+serverlist_url='https://serverlist.piaservers.net/vpninfo/servers/v6'
 
 # This function checks the latency you have to a specific region.
 # It will print a human-readable message to stderr,
@@ -170,8 +178,16 @@ if [ "$(echo "$generateTokenResponse" | jq -r '.status')" != "OK" ]; then
 fi
 
 token="$(echo "$generateTokenResponse" | jq -r '.token')"
-echo "This token will expire in 24 hours.
-"
+tokenLocation=/config/pia/pia-info/token
+echo -e "PIA_TOKEN=$token${nc}"
+echo "$token" > "$tokenLocation" || exit 1
+
+echo "This token will expire in 24 hours."
+
+# Save variables to files so refresh script can get them
+pf_filepath=/config/pia/pia-info
+echo "$PIA_USER" > $pf_filepath/pia_creds.txt
+echo "$PIA_PASS" >> $pf_filepath/pia_creds.txt
 
 # just making sure this variable doesn't contain some strange string
 if [ "$PIA_PF" != true ]; then

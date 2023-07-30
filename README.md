@@ -1,29 +1,32 @@
 # Manual PIA VPN Connections
 
-### This is a FreeBSD/FreeNAS fork of the original Linux scripts at https://github.com/pia-foss/manual-connections.  
+### This is a FreeBSD/TrueNAS CORE Wireguard and OpenVPN fork of https://github.com/glorious1/manual-connections/.
+### Which is a FreeBSD OpenVPN fork of the original Linux scripts at https://github.com/pia-foss/manual-connections.  
+
 Fork Notes:
-1. The scripts are set up to work via either OpenVPN or Wireguard.  Comment out the one you don't use in `run_setup.sh`. 
-2. If you clone this repository, I suggest you change the directory name to `/pia` because that's the directory name I used. 
-3. `run_setup.sh` is the script you call to start the whole process.  It calls the following script and so on.  If you're using port forwarding, `port_forwarding.sh` and `refresh_pia_port.sh` are the last scripts called.  The port needs to be refreshed about every 15 minutes.  I separated out the code in the latter script so it could be called by a cron job inside the jail.  That way the script doesn't need to be left running in a tmux session or something.  Cron should look like `*/15 * * * * /pia/refresh_pia_port.sh > /pia-info/refresh.log 2>&1` and run as `root`.  The output will be in `/pia-info/refresh.log`.
-4. I changed `run_setup.sh` from a question-answer format to simply a settings/config file for the process.  Just edit to your desired settings.  PIA username and password are handled as an external file `/pia-info/pia_creds.txt` in the old style: first line user name, second line password.  If you don't want such a file sitting on your server, you can get the question-answer code from the Linux script and change that part.
-5. In `port_forwarding.sh`, I added a transmission command to send the port number to transmission-rpc.  For this to work, transmission should be running before you start the scripts.  (OpenVPN should NOT be running, as the scripts configure and start it. `service openvpn stop`)
-6. If you have trouble, carefully read the output to see where it failed.  I added a printed header to each script when it starts so you can see where you are (not `openvpn_up.sh` because it is run by OpenVPN).  Should OpenVPN fail to start, I added a command to print `/pia-info/debug_info` to screen so you can see what was going on with OpenVPN.  The scripts also store a bunch of other stuff in `/pia-info`. 
-7. At least for OpenVPN, the network interface used is tun0.  If you start run_setup.sh interactively, a later script will check for tun0 and offer to kill the openvpn process that started it.  Otherwise, it will create another tun# and report everything is great, but you won't actually have your open port in transmission.
-8. I start `run_setup.sh` with an @reboot cron job inside the jail so it starts when the jail starts: `@reboot cd /pia && /pia/run_setup.sh > /pia-info/startup.log 2>&1`.  This puts all the output in a log in `/pia-info`.  If the jail just started, there shouldn't be any openvpn process or tun0, so that shouldn't be a problem.
+1. The scripts are set up to work via either OpenVPN or Wireguard. 
+2. If you clone this repository, the scripts are hardcoded to run from `/config/pia`.  (A TrueNAS standard for permanent jail data.)
+3. `run_setup.sh' will prompt and store all needed information.  It calls the following script and so on.  If you're using port forwarding, `port_forwarding.sh` and `refresh_pia_port.sh` are the last scripts called.  The port needs to be refreshed about every 15 minutes.  Cron should look like `*/15 * * * * /config/pia/refresh_pia_port.sh > /config/pia/pia-info/refresh.log 2>&1` and run as `root`.  The output will be in `/config/pia/pia-info/refresh.log`.
+4. 'run_setup_again.sh' runs the full setup scripts using the stored data instead of prompting.  Configuration data is stored in /config/pia/pia-info.
+5. In `refresh_pia_port.sh`, A command was added to send the port number to the torrent client. Deluge/Transmission are checked for and corresponding command is sent.
+6. If you have trouble, carefully read the output to see where it failed.  Should OpenVPN fail to start, `/config/pia/pia-info/debug_info` will print to screen so you can see what was going on with OpenVPN.  The scripts also store a bunch of other stuff in `/config/pia/pia-info`. 
+7. At least for OpenVPN, the network interface used is tun0.  During setup, a later script will check for tun0 and offer to kill the openvpn process that started it.  Otherwise, it will create another tun# and report everything is great, but you won't actually have your open port in transmission.
+8. FreeBSD service friendly. Both final configured PIA Wireguard and OpenVPN connections can be automated via rc.conf file.
+9. Tested on TrueNAS 13.1 jail.  Should operate the same on any FreeBSD 13.x system.
 
 End of Fork Notes
 
 This repository contains documentation on how to create native WireGuard and OpenVPN connections to Private Internet Access' (PIA) __NextGen network__, and also on how to enable Port Forwarding in case you require this feature. You will find a lot of information below. However if you prefer quick test, here is the __TL/DR__:
 
 ```
-git clone https://github.com/glorious1/manual-connections.git
-cd manual-connections # I changed the directory name to pia.
+git clone https://github.com/1ccs-todd/manual-connections.git /config/pia
+cd /config/pia
 ./run_setup.sh
 ```
 
 ### Dependencies
 
-In order for the scripts to work (probably even if you do a manual setup), you will need the following packages:
+In order for the scripts to work, the following packages are installed as needed:
  * `bash`
  * `curl`
  * `jq`
@@ -34,13 +37,11 @@ In order for the scripts to work (probably even if you do a manual setup), you w
 ### Disclaimers
 
  * Port Forwarding is disabled on server-side in the United States.
- * These scripts do not enforce IPv6 or DNS settings, so that you have the freedom to configure your setup the way you desire it to work. This means you should have good understanding of VPN and cybersecurity in order to properly configure your setup.
- * For battle-tested security, please use the official PIA App, as it was designed to protect you in all scenarios.
- * This repo is really fresh at this moment, so please take into consideration the fact that you will probably be one of the first users that use the scripts.
+ * These scripts do not enforce IPv6 or DNS settings, so that you have the freedom to configure your setup the way you desire it to work. This means you should have good understanding of VPN and cybersecurity in order to properly configure your setup. 
 
 ## PIA Port Forwarding
 
-The PIA Port Forwarding service (a.k.a. PF) allows you run services on your own devices, and expose them to the internet by using the PIA VPN Network. The easiest way to set this up is by using a native PIA aplication. In case you require port forwarding on native clients, please follow this documentation in order to enable port forwarding for your VPN connection.
+The PIA Port Forwarding service (a.k.a. PF) allows you run services on your own devices, and expose them to the internet by using the PIA VPN Network.
 
 This service can be used only AFTER establishing a VPN connection.
 

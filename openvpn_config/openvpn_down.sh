@@ -1,4 +1,4 @@
-#!/usr/local/bin/bash
+#!/usr/bin/env bash
 
 # Remove process and route information when connection closes
-rm -rf /pia-info/pia_pid /pia-info-manual/route_info
+rm -rf /var/run/openvpn.pid /config/pia/pia-info/route_info
