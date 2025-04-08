@@ -1,3 +1,6 @@
+REPO ARCHIVED:  TrueNAS Core is being phased out for Community Edition (Scale).
+                These scripts are still viable for FreeBSD host systems.
+
 # Configure PIA VPN Connections
 
 ### This is a FreeBSD/TrueNAS CORE Wireguard and OpenVPN fork of https://github.com/glorious1/manual-connections/.
